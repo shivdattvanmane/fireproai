@@ -1,0 +1,22 @@
+# ─── Core ────────────────────────────────────────────────────────────────────
+flask>=3.0.0
+flask-socketio>=5.3.6
+python-engineio>=4.9.0
+python-socketio>=5.11.0
+eventlet>=0.35.2          # or use: gevent>=23.9.1
+
+# ─── Computer Vision ─────────────────────────────────────────────────────────
+ultralytics>=8.2.0        # YOLOv8 / YOLOv9 / YOLOv10
+opencv-python>=4.9.0      # cv2
+numpy>=1.26.0
+
+# ─── Firebase ────────────────────────────────────────────────────────────────
+firebase-admin>=6.5.0     # Admin SDK for auth + Firestore
+requests>=2.31.0
+
+# ─── Excel export ────────────────────────────────────────────────────────────
+openpyxl>=3.1.2
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+Pillow>=10.3.0
