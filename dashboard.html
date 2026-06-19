@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FirePro AI — Command Center</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#060809;--panel:#0b1217;--panel2:#0f1a22;--panel3:#111f28;
+      --border:#1a2d3a;--border2:#243d4e;
+      --amber:#f5a623;--amber2:#ffcc60;--amber-dim:#7a5010;
+      --red:#ff2d2d;--red-dim:#5a1010;
+      --cyan:#00d4ff;--cyan-dim:#005570;
+      --green:#39ff14;--green-dim:#0f4008;
+      --text:#b8ccd8;--text2:#7a9aaa;--muted:#2a4050;
+      --mono:'Share Tech Mono',monospace;
+      --display:'Orbitron',sans-serif;
+      --ui:'Rajdhani',sans-serif;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--ui);overflow:hidden}
+
+    /* ── Hex grid bg ── */
+    body::before{
+      content:'';position:fixed;inset:0;z-index:0;opacity:.15;pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66zm0-2l26-15V18L28 2 2 18v31L28 64z' fill='none' stroke='%23f5a623' stroke-width='.25'/%3E%3C/svg%3E");
+    }
+    /* Scanlines */
+    body::after{
+      content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 3px);
+    }
+
+    /* ── Layout shell ── */
+    .shell{position:relative;z-index:1;display:grid;height:100vh;
+           grid-template-rows:48px 1fr;grid-template-columns:200px 1fr 280px;
+           grid-template-areas:"topbar topbar topbar" "sidenav main rightpanel"}
+
+    /* ════════════════ TOPBAR ════════════════ */
+    .topbar{
+      grid-area:topbar;
+      background:linear-gradient(90deg,var(--panel) 0%,var(--panel2) 100%);
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;padding:0 1rem;gap:1rem;
+      position:relative;overflow:hidden;
+    }
+    .topbar::after{
+      content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+      background:linear-gradient(90deg,transparent,var(--amber),transparent);
+      animation:scan-line 4s linear infinite;
+    }
+    @keyframes scan-line{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+
+    .tb-logo{display:flex;align-items:center;gap:.6rem;flex-shrink:0}
+    .tb-logo-icon{
+      font-size:1.3rem;
+      filter:drop-shadow(0 0 8px rgba(245,166,35,.7));
+      animation:flicker 5s infinite;
+    }
+    @keyframes flicker{0%,85%,89%,100%{opacity:1}86%{opacity:.4}88%{opacity:.9}}
+    .tb-logo-text{font-family:var(--display);font-size:.85rem;color:var(--amber);letter-spacing:.12em}
+    .tb-logo-ver{font-family:var(--mono);font-size:.48rem;color:var(--muted);letter-spacing:.1em}
+
+    .tb-divider{width:1px;height:24px;background:var(--border);flex-shrink:0}
+
+    .tb-status{display:flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:.58rem}
+    .led{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .led.green{background:var(--green);box-shadow:0 0 6px var(--green)}
+    .led.red{background:var(--red);box-shadow:0 0 6px var(--red)}
+    .led.amber{background:var(--amber);box-shadow:0 0 6px var(--amber);animation:led-pulse 1.5s ease-in-out infinite}
+    .led.off{background:var(--muted)}
+    @keyframes led-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+    .tb-clock{margin-left:auto;font-family:var(--mono);font-size:.75rem;color:var(--amber);letter-spacing:.1em}
+    .tb-date{font-family:var(--mono);font-size:.52rem;color:var(--muted);margin-left:.5rem}
+    .tb-admin{
+      display:flex;align-items:center;gap:.4rem;margin-left:.75rem;
+      font-family:var(--mono);font-size:.55rem;color:var(--text2);
+      background:var(--panel3);border:1px solid var(--border);
+      padding:.2rem .6rem;
+      clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);
+    }
+
+    /* ════════════════ SIDENAV ════════════════ */
+    .sidenav{
+      grid-area:sidenav;
+      background:var(--panel);border-right:1px solid var(--border);
+      display:flex;flex-direction:column;overflow:hidden;
+    }
+    .nav-section-label{
+      font-family:var(--mono);font-size:.5rem;color:var(--muted);
+      letter-spacing:.2em;text-transform:uppercase;
+      padding:.6rem 1rem .3rem;border-top:1px solid var(--border);
+    }
+    .nav-section-label:first-child{border-top:none;padding-top:.75rem}
+    .nav-item{
+      display:flex;align-items:center;gap:.6rem;
+      padding:.45rem 1rem;cursor:pointer;
+      font-family:var(--ui);font-size:.82rem;font-weight:500;
+      color:var(--text2);border-left:2px solid transparent;
+      transition:all .15s;text-decoration:none;
+      letter-spacing:.03em;
+    }
+    .nav-item:hover{color:var(--text);background:rgba(245,166,35,.04);border-left-color:var(--amber-dim)}
+    .nav-item.active{color:var(--amber);border-left-color:var(--amber);background:rgba(245,166,35,.06)}
+    .nav-item .ni{font-size:.9rem;width:18px;text-align:center;flex-shrink:0}
+    .nav-badge{
+      margin-left:auto;background:var(--red-dim);color:var(--red);
+      font-family:var(--mono);font-size:.5rem;padding:.1rem .35rem;
+      border:1px solid rgba(255,45,45,.3);min-width:18px;text-align:center;
+    }
+    .nav-spacer{flex:1}
+    .nav-foot{
+      padding:.75rem 1rem;border-top:1px solid var(--border);
+      font-family:var(--mono);font-size:.55rem;color:var(--muted);
+    }
+    .nav-foot-email{color:var(--text2);font-size:.6rem;margin-bottom:.4rem;
+                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .btn-logout{
+      width:100%;background:transparent;border:1px solid var(--border);
+      color:var(--muted);font-family:var(--mono);font-size:.55rem;
+      letter-spacing:.1em;padding:.3rem;cursor:pointer;
+      clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);
+      transition:border-color .15s,color .15s;
+    }
+    .btn-logout:hover{border-color:var(--red);color:var(--red)}
+
+    /* ════════════════ MAIN ════════════════ */
+    .main{grid-area:main;display:grid;grid-template-rows:1fr 110px;overflow:hidden}
+
+    /* Video panel */
+    .video-panel{
+      background:#000;position:relative;overflow:hidden;
+      border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+    }
+    #liveFrame{width:100%;height:100%;object-fit:contain;display:none}
+    .no-stream{
+      position:absolute;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:.75rem;
+    }
+    .no-stream-icon{
+      font-size:3.5rem;opacity:.15;
+      filter:drop-shadow(0 0 20px rgba(245,166,35,.3));
+    }
+    .no-stream-text{font-family:var(--mono);font-size:.7rem;color:var(--muted);letter-spacing:.15em}
+    .no-stream-sub{font-family:var(--mono);font-size:.55rem;color:var(--muted);opacity:.5}
+
+    /* Corner HUD brackets */
+    .hud-corner{position:absolute;width:24px;height:24px;pointer-events:none}
+    .hud-tl{top:12px;left:12px;border-top:2px solid var(--amber);border-left:2px solid var(--amber)}
+    .hud-tr{top:12px;right:12px;border-top:2px solid var(--amber);border-right:2px solid var(--amber)}
+    .hud-bl{bottom:12px;left:12px;border-bottom:2px solid var(--amber);border-left:2px solid var(--amber)}
+    .hud-br{bottom:12px;right:12px;border-bottom:2px solid var(--amber);border-right:2px solid var(--amber)}
+
+    /* HUD overlays */
+    .hud-tl-info{
+      position:absolute;top:18px;left:48px;
+      font-family:var(--mono);font-size:.58rem;color:var(--amber);
+      display:flex;flex-direction:column;gap:.2rem;
+    }
+    .hud-tr-info{
+      position:absolute;top:18px;right:48px;
+      font-family:var(--mono);font-size:.58rem;color:var(--amber);
+      text-align:right;display:flex;flex-direction:column;gap:.2rem;
+    }
+    .hud-br-info{
+      position:absolute;bottom:18px;right:48px;
+      font-family:var(--mono);font-size:.55rem;color:var(--amber);opacity:.6;
+    }
+    .rec-badge{
+      display:none;align-items:center;gap:.35rem;
+      background:rgba(255,45,45,.15);border:1px solid rgba(255,45,45,.4);
+      padding:.2rem .55rem;font-family:var(--mono);font-size:.58rem;color:var(--red);
+    }
+    .rec-badge.show{display:flex}
+    .rec-dot{width:7px;height:7px;border-radius:50%;background:var(--red);
+             animation:rec-blink 1s ease-in-out infinite}
+    @keyframes rec-blink{0%,100%{opacity:1}50%{opacity:.15}}
+    .fire-badge{
+      display:none;align-items:center;gap:.35rem;
+      background:rgba(255,45,45,.15);border:1px solid rgba(255,45,45,.5);
+      padding:.2rem .55rem;font-family:var(--mono);font-size:.58rem;color:var(--red);
+      animation:fire-alert-pulse .5s ease-in-out infinite alternate;
+    }
+    .fire-badge.show{display:flex}
+    @keyframes fire-alert-pulse{from{background:rgba(255,45,45,.1)}to{background:rgba(255,45,45,.25)}}
+
+    /* Stats strip */
+    .stats-strip{
+      display:grid;grid-template-columns:repeat(4,1fr);
+      border-right:1px solid var(--border);
+    }
+    .stat-cell{
+      background:var(--panel);border-right:1px solid var(--border);
+      padding:.6rem 1rem;display:flex;flex-direction:column;justify-content:center;
+      position:relative;overflow:hidden;
+    }
+    .stat-cell:last-child{border-right:none}
+    .stat-cell::before{
+      content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+      background:linear-gradient(90deg,transparent,var(--amber),transparent);
+      opacity:0;transition:opacity .3s;
+    }
+    .stat-cell:hover::before{opacity:1}
+    .stat-lbl{font-family:var(--mono);font-size:.52rem;color:var(--muted);
+               letter-spacing:.15em;text-transform:uppercase;margin-bottom:.2rem}
+    .stat-val{font-family:var(--display);font-size:1.8rem;line-height:1;color:var(--text)}
+    .stat-val.amber{color:var(--amber)}
+    .stat-val.red{color:var(--red)}
+    .stat-val.cyan{color:var(--cyan)}
+    .stat-val.green{color:var(--green)}
+    .stat-sub{font-family:var(--mono);font-size:.5rem;color:var(--muted);margin-top:.15rem}
+
+    /* ════════════════ RIGHT PANEL ════════════════ */
+    .rightpanel{
+      grid-area:rightpanel;
+      background:var(--panel);
+      display:flex;flex-direction:column;overflow:hidden;
+    }
+    .rp-section{
+      border-bottom:1px solid var(--border);flex-shrink:0;
+    }
+    .rp-header{
+      padding:.5rem .75rem;display:flex;align-items:center;justify-content:space-between;
+      cursor:pointer;user-select:none;
+    }
+    .rp-title{
+      font-family:var(--mono);font-size:.58rem;color:var(--amber);
+      letter-spacing:.15em;text-transform:uppercase;
+      display:flex;align-items:center;gap:.4rem;
+    }
+    .rp-toggle{font-size:.55rem;color:var(--muted)}
+    .rp-body{padding:.6rem .75rem;display:flex;flex-direction:column;gap:.5rem}
+    .rp-body.hidden{display:none}
+
+    /* Control buttons */
+    .ctrl-btn{
+      width:100%;padding:.55rem;font-family:var(--mono);font-size:.65rem;
+      letter-spacing:.1em;cursor:pointer;border:1px solid;
+      clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));
+      transition:all .15s;font-weight:600;
+    }
+    .ctrl-btn.start{background:rgba(57,255,20,.1);border-color:rgba(57,255,20,.4);color:var(--green)}
+    .ctrl-btn.start:hover{background:rgba(57,255,20,.2);box-shadow:0 0 15px rgba(57,255,20,.15)}
+    .ctrl-btn.stop{background:rgba(255,45,45,.1);border-color:rgba(255,45,45,.4);color:var(--red)}
+    .ctrl-btn.stop:hover{background:rgba(255,45,45,.2)}
+    .ctrl-btn.ghost{background:transparent;border-color:var(--border);color:var(--text2)}
+    .ctrl-btn.ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+    .ctrl-btn:disabled{opacity:.35;cursor:not-allowed}
+
+    /* Settings fields */
+    .s-label{font-family:var(--mono);font-size:.52rem;color:var(--amber);
+              letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:.2rem}
+    .s-input,.s-select{
+      width:100%;background:rgba(0,0,0,.4);border:1px solid var(--border);
+      border-bottom:1px solid var(--border2);
+      color:var(--text);font-family:var(--mono);font-size:.72rem;
+      padding:.38rem .55rem;outline:none;
+      clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);
+      transition:border-color .2s;
+    }
+    .s-input:focus,.s-select:focus{border-color:var(--amber);border-bottom-color:var(--amber)}
+    .s-input::placeholder{color:var(--muted)}
+    .s-row-2{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+    .range-row{display:flex;align-items:center;gap:.5rem}
+    .range-row input[type=range]{flex:1;accent-color:var(--amber);height:3px}
+    .range-val{font-family:var(--mono);font-size:.62rem;color:var(--amber);width:2.5rem;text-align:right}
+
+    /* Active chips */
+    #activeChips{display:flex;flex-wrap:wrap;gap:.25rem;min-height:16px}
+    .chip{
+      background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.25);
+      padding:.1rem .4rem;font-family:var(--mono);font-size:.55rem;color:var(--amber);
+      clip-path:polygon(0 0,calc(100% - 4px) 0,100% 4px,100% 100%,0 100%);
+    }
+
+    /* Auto-save tag */
+    #autoSaveTag{font-family:var(--mono);font-size:.5rem;color:var(--muted)}
+
+    /* Notify section */
+    .toggle-row{display:flex;align-items:center;gap:.5rem;
+                font-family:var(--mono);font-size:.62rem;color:var(--text2)}
+    .toggle-row input[type=checkbox]{accent-color:var(--amber);width:13px;height:13px}
+
+    /* Alert list */
+    .alert-feed{flex:1;overflow-y:auto;padding:.4rem .5rem;display:flex;flex-direction:column;gap:.25rem}
+    .alert-item{
+      padding:.35rem .55rem;border-left:3px solid;
+      font-family:var(--mono);font-size:.62rem;line-height:1.5;
+      animation:alert-in .25s ease both;
+      clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%);
+    }
+    @keyframes alert-in{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
+    .alert-item.HIGH{border-color:var(--red);background:rgba(255,45,45,.07)}
+    .alert-item.MEDIUM{border-color:var(--amber);background:rgba(245,166,35,.05)}
+    .alert-sev{font-size:.5rem;letter-spacing:.1em;font-weight:700}
+    .alert-item.HIGH .alert-sev{color:var(--red)}
+    .alert-item.MEDIUM .alert-sev{color:var(--amber)}
+    .alert-time{color:var(--muted);float:right}
+    .alert-lbl{color:var(--text)}
+    .no-alerts{font-family:var(--mono);font-size:.6rem;color:var(--muted);
+                text-align:center;padding:1.5rem .5rem;letter-spacing:.1em}
+
+    /* Notify status */
+    #notifyStatusMsg{font-family:var(--mono);font-size:.6rem;min-height:14px}
+
+    /* Scrollbar */
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:999px}
+
+    /* Toast */
+    .toast-wrap{position:fixed;bottom:1rem;right:1rem;z-index:9999;
+                 display:flex;flex-direction:column;gap:.3rem;align-items:flex-end}
+    .toast{
+      background:var(--panel2);border:1px solid var(--border2);
+      padding:.5rem .9rem;font-family:var(--mono);font-size:.65rem;color:var(--text);
+      max-width:280px;border-left:3px solid var(--amber);
+      clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);
+      animation:toast-in .25s ease both,toast-out .3s ease 3.2s both;
+    }
+    .toast.danger{border-left-color:var(--red)}
+    .toast.ok{border-left-color:var(--green)}
+    @keyframes toast-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+    @keyframes toast-out{from{opacity:1}to{opacity:0}}
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ═══ TOPBAR ═══ -->
+  <header class="topbar">
+    <div class="tb-logo">
+      <span class="tb-logo-icon">🔥</span>
+      <div>
+        <div class="tb-logo-text">FIREPRO AI</div>
+        <div class="tb-logo-ver">TACTICAL SURVEILLANCE SYSTEM</div>
+      </div>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-status">
+      <div class="led" id="streamLed" style="background:var(--muted)"></div>
+      <span id="streamStatusText" style="color:var(--muted)">OFFLINE</span>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-status">
+      <div class="led amber"></div>
+      <span>CAM-01 ACTIVE</span>
+    </div>
+    <div class="tb-clock" id="clock">--:--:--</div>
+    <div class="tb-date" id="dateTxt"></div>
+    <div class="tb-admin">◈ {{ email }}</div>
+  </header>
+
+  <!-- ═══ SIDENAV ═══ -->
+  <nav class="sidenav">
+    <span class="nav-section-label">Navigation</span>
+    <a href="/dashboard" class="nav-item active"><span class="ni">📡</span> Live Monitor</a>
+    <a href="/history"   class="nav-item"><span class="ni">📋</span> Event Log</a>
+    <a href="/api/export/excel" class="nav-item"><span class="ni">📊</span> Export Report</a>
+
+    <span class="nav-section-label">System</span>
+    <a href="#" class="nav-item" onclick="takeScreenshot();return false"><span class="ni">📸</span> Snapshot</a>
+
+    <div class="nav-spacer"></div>
+    <div class="nav-foot">
+      <div class="nav-foot-email">{{ email }}</div>
+      <button class="btn-logout" onclick="logout()">◈ TERMINATE SESSION</button>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main">
+
+    <!-- Video feed -->
+    <div class="video-panel">
+      <img id="liveFrame" alt="Live feed">
+      <div class="no-stream" id="noStream">
+        <div class="no-stream-icon">📷</div>
+        <div class="no-stream-text">CAMERA OFFLINE</div>
+        <div class="no-stream-sub">PRESS START DETECTION TO INITIALIZE FEED</div>
+      </div>
+
+      <!-- HUD corners -->
+      <div class="hud-corner hud-tl"></div>
+      <div class="hud-corner hud-tr"></div>
+      <div class="hud-corner hud-bl"></div>
+      <div class="hud-corner hud-br"></div>
+
+      <!-- HUD info overlays -->
+      <div class="hud-tl-info">
+        <div id="recBadge" class="rec-badge"><div class="rec-dot"></div> RECORDING</div>
+        <div id="fireBadge" class="fire-badge">⚠ FIRE DETECTED</div>
+      </div>
+      <div class="hud-tr-info">
+        <div id="fpsTag" style="color:var(--amber);font-family:var(--mono);font-size:.6rem">— FPS</div>
+        <div id="detTag" style="color:var(--text2);font-family:var(--mono);font-size:.58rem">DETS: 0</div>
+      </div>
+      <div class="hud-br-info" id="tsTag"></div>
+    </div>
+
+    <!-- Stats strip -->
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <div class="stat-lbl">Total Alerts</div>
+        <div class="stat-val amber" id="sTotalAlerts">0</div>
+        <div class="stat-sub">this session</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-lbl">Detections</div>
+        <div class="stat-val cyan" id="sCurrentDets">0</div>
+        <div class="stat-sub">current frame</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-lbl">Stream FPS</div>
+        <div class="stat-val green" id="sFps">—</div>
+        <div class="stat-sub">frames/sec</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-lbl">Active Objects</div>
+        <div id="sLabels" style="display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ RIGHT PANEL ═══ -->
+  <aside class="rightpanel">
+
+    <!-- Controls -->
+    <div class="rp-section">
+      <div class="rp-header" onclick="toggleSection('ctrl')">
+        <span class="rp-title">⚙ CONTROLS</span>
+        <span class="rp-toggle" id="ctrl-toggle">▲</span>
+      </div>
+      <div class="rp-body" id="ctrl-body">
+        <button class="ctrl-btn start" id="startBtn" onclick="startDetection()">▶ START DETECTION</button>
+        <button class="ctrl-btn stop"  id="stopBtn"  onclick="stopDetection()" disabled>⏹ STOP DETECTION</button>
+        <button class="ctrl-btn ghost" onclick="takeScreenshot()">◈ CAPTURE SNAPSHOT</button>
+      </div>
+    </div>
+
+    <!-- Detection Settings -->
+    <div class="rp-section">
+      <div class="rp-header" onclick="toggleSection('settings')">
+        <span class="rp-title">◈ DETECTION SETTINGS</span>
+        <span class="rp-toggle" id="settings-toggle">▲</span>
+      </div>
+      <div class="rp-body" id="settings-body">
+        <div>
+          <span class="s-label" style="display:flex;justify-content:space-between;align-items:center">
+            Alert Objects
+            <span id="autoSaveTag"></span>
+          </span>
+          <input class="s-input" id="sObjects" placeholder="fire, smoke, person"
+                 value="fire, smoke, person" oninput="onObjectsChanged(this)">
+          <div id="activeChips" style="margin-top:.35rem"></div>
+        </div>
+        <div class="s-row-2">
+          <div><span class="s-label">Start Time</span>
+               <input class="s-input" id="sStart" type="time" value="" onchange="saveSettings()"></div>
+          <div><span class="s-label">End Time</span>
+               <input class="s-input" id="sEnd"   type="time" value="" onchange="saveSettings()"></div>
+        </div>
+        <div>
+          <span class="s-label">Fire Confidence</span>
+          <div class="range-row">
+            <input type="range" min="0.1" max="0.9" step="0.05" value="0.4" id="sFireConf"
+                   oninput="document.getElementById('sFireConfVal').textContent=Math.round(this.value*100)+'%'"
+                   onchange="saveSettings()">
+            <span class="range-val" id="sFireConfVal">40%</span>
+          </div>
+        </div>
+        <div>
+          <span class="s-label">Object Confidence</span>
+          <div class="range-row">
+            <input type="range" min="0.1" max="0.9" step="0.05" value="0.4" id="sObjConf"
+                   oninput="document.getElementById('sObjConfVal').textContent=Math.round(this.value*100)+'%'"
+                   onchange="saveSettings()">
+            <span class="range-val" id="sObjConfVal">40%</span>
+          </div>
+        </div>
+        <div>
+          <span class="s-label">Alert Cooldown (sec)</span>
+          <input class="s-input" id="sCooldown" type="number" value="5" min="1" max="60" onchange="saveSettings()">
+        </div>
+        <button class="ctrl-btn ghost" onclick="saveSettings()" style="font-size:.6rem">◈ SAVE SETTINGS</button>
+      </div>
+    </div>
+
+    <!-- Email Notifications -->
+    <div class="rp-section">
+      <div class="rp-header" onclick="toggleSection('notify')">
+        <span class="rp-title">📧 EMAIL ALERTS</span>
+        <span class="rp-toggle" id="notify-toggle">▼</span>
+      </div>
+      <div class="rp-body hidden" id="notify-body">
+        <label class="toggle-row">
+          <input type="checkbox" id="nEmailEnabled" checked onchange="saveNotifySettings()">
+          Enable email notifications
+        </label>
+        <div>
+          <span class="s-label">Sender Gmail</span>
+          <input class="s-input" id="nSenderEmail" placeholder="your_gmail@gmail.com" type="email">
+        </div>
+        <div>
+          <span class="s-label">App Password</span>
+          <input class="s-input" id="nSenderPass" type="password" placeholder="xxxx xxxx xxxx xxxx">
+        </div>
+        <div>
+          <span class="s-label">Recipient Email</span>
+          <input class="s-input" id="nRecipient" placeholder="admin@yourdomain.com" type="email">
+        </div>
+        <div>
+          <span class="s-label">Re-alert Cooldown (sec)</span>
+          <input class="s-input" id="nCooldown" type="number" value="60" min="10" max="3600" onchange="saveNotifySettings()">
+        </div>
+        <div style="display:flex;gap:.4rem">
+          <button class="ctrl-btn ghost" style="flex:1;font-size:.58rem" onclick="saveNotifySettings()">◈ SAVE</button>
+          <button class="ctrl-btn ghost" style="flex:1;font-size:.58rem;border-color:rgba(0,212,255,.3);color:var(--cyan)"
+                  onclick="testNotify()">📧 TEST</button>
+        </div>
+        <div id="notifyStatusMsg"></div>
+      </div>
+    </div>
+
+    <!-- Live Alert Feed -->
+    <div class="rp-header" style="border-top:1px solid var(--border)">
+      <span class="rp-title">⚡ LIVE ALERTS</span>
+      <span id="alertCountBadge" class="nav-badge" style="display:none">0</span>
+    </div>
+    <div class="alert-feed" id="alertList">
+      <div class="no-alerts">NO EVENTS DETECTED</div>
+    </div>
+
+  </aside>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  function tickClock(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('en-IN',{hour12:false});
+    document.getElementById('dateTxt').textContent=now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+    document.getElementById('tsTag').textContent=now.toLocaleTimeString('en-IN',{hour12:false});
+  }
+  tickClock();setInterval(tickClock,1000);
+
+  // ── Collapsible sections ───────────────────────────────────────────────────
+  function toggleSection(id){
+    const body=document.getElementById(id+'-body');
+    const tog=document.getElementById(id+'-toggle');
+    const hidden=body.classList.toggle('hidden');
+    tog.textContent=hidden?'▼':'▲';
+    if(!hidden && id==='notify') loadNotifySettings();
+  }
+
+  // ── Socket.IO ──────────────────────────────────────────────────────────────
+  const socket=io();
+  let alertCount=0;
+
+  socket.on('stream_started',()=>{setStream(true);toast('▶ Detection stream initialized','ok')});
+  socket.on('stream_stopped', ()=>{setStream(false);toast('⏹ Stream terminated')});
+
+  socket.on('frame',({data,stats})=>{
+    const img=document.getElementById('liveFrame');
+    img.src='data:image/jpeg;base64,'+data;
+    img.style.display='block';
+    document.getElementById('noStream').style.display='none';
+    document.getElementById('sFps').textContent=stats.fps??'—';
+    document.getElementById('sTotalAlerts').textContent=stats.total_alerts??0;
+    document.getElementById('sCurrentDets').textContent=stats.current_dets??0;
+    document.getElementById('fpsTag').textContent=(stats.fps??'—')+' FPS';
+    document.getElementById('detTag').textContent='DETS: '+(stats.current_dets??0);
+    document.getElementById('fireBadge').classList.toggle('show',!!stats.fire_active);
+    const lc=document.getElementById('sLabels');
+    lc.innerHTML=(stats.labels||[]).map(l=>`<span class="chip">${l}</span>`).join('')||'<span style="font-family:var(--mono);font-size:.55rem;color:var(--muted)">NONE</span>';
+  });
+
+  socket.on('alert',alert=>{
+    alertCount++;
+    document.getElementById('alertCountBadge').style.display='block';
+    document.getElementById('alertCountBadge').textContent=alertCount;
+    addAlert(alert);
+    playBeep(alert.severity==='HIGH'?1400:900);
+    if(Notification.permission==='granted'&&alert.severity==='HIGH')
+      new Notification('⚠ FIREPRO ALERT',{body:alert.label?.toUpperCase()+' detected ('+Math.round((alert.conf||0)*100)+'%)'});
+  });
+
+  socket.on('screenshot_saved',({path})=>toast('◈ Snapshot: '+path));
+  socket.on('error',({message})=>toast('✗ '+message,'danger'));
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+  async function startDetection(){
+    const r=await fetch('/api/detection/start',{method:'POST'});
+    const d=await r.json();
+    if(d.error){toast('✗ '+d.error,'danger');return}
+    document.getElementById('startBtn').disabled=true;
+    document.getElementById('stopBtn').disabled=false;
+    document.getElementById('recBadge').classList.add('show');
+  }
+  async function stopDetection(){
+    await fetch('/api/detection/stop',{method:'POST'});
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('stopBtn').disabled=true;
+    document.getElementById('recBadge').classList.remove('show');
+    document.getElementById('liveFrame').style.display='none';
+    document.getElementById('noStream').style.display='flex';
+  }
+  async function takeScreenshot(){await fetch('/api/screenshot',{method:'POST'})}
+
+  function setStream(active){
+    const led=document.getElementById('streamLed');
+    const txt=document.getElementById('streamStatusText');
+    if(active){led.className='led green';txt.textContent='LIVE';txt.style.color='var(--green)'}
+    else{led.style.background='var(--muted)';led.className='led';txt.textContent='OFFLINE';txt.style.color='var(--muted)'}
+  }
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  let _objTimer=null;
+  function onObjectsChanged(input){
+    const tag=document.getElementById('autoSaveTag');
+    tag.textContent='…typing';tag.style.color='var(--muted)';
+    updateChips(input.value);
+    clearTimeout(_objTimer);
+    _objTimer=setTimeout(()=>autoSaveObjects(),600);
+  }
+  function updateChips(raw){
+    const chips=document.getElementById('activeChips');
+    const objs=raw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    chips.innerHTML=objs.map(o=>`<span class="chip">⚡ ${o}</span>`).join('');
+  }
+  async function autoSaveObjects(){
+    const tag=document.getElementById('autoSaveTag');
+    const objs=document.getElementById('sObjects').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(!objs.length){tag.textContent='⚠ EMPTY';tag.style.color='var(--red)';return}
+    tag.textContent='saving…';tag.style.color='var(--muted)';
+    let cur={};try{const r=await fetch('/api/settings');cur=await r.json()}catch(_){}
+    const payload={objects:objs,start_time:cur.start_time||'',end_time:cur.end_time||'',
+      fire_conf:cur.fire_conf||parseFloat(document.getElementById('sFireConf').value),
+      obj_conf:cur.obj_conf||parseFloat(document.getElementById('sObjConf').value),
+      alert_cooldown:cur.alert_cooldown||parseInt(document.getElementById('sCooldown').value)};
+    try{
+      const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const d=await r.json();
+      if(d.success){tag.textContent='✓ ACTIVE';tag.style.color='var(--green)';updateChips(objs.join(', '))}
+      else{tag.textContent='✗ ERR';tag.style.color='var(--red)'}
+    }catch(e){tag.textContent='✗ ERR';tag.style.color='var(--red)'}
+  }
+  async function saveSettings(auto=false){
+    const btn=document.querySelector("button[onclick='saveSettings()']");
+    const objs=document.getElementById('sObjects').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(!objs.length){if(!auto)toast('⚠ Add at least one object','danger');return}
+    const payload={objects:objs,
+      start_time:document.getElementById('sStart').value,
+      end_time:document.getElementById('sEnd').value,
+      fire_conf:parseFloat(document.getElementById('sFireConf').value),
+      obj_conf:parseFloat(document.getElementById('sObjConf').value),
+      alert_cooldown:parseInt(document.getElementById('sCooldown').value)};
+    if(!auto&&btn){btn.textContent='SAVING…';btn.disabled=true}
+    try{
+      const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const d=await r.json();
+      if(d.success)toast('◈ Settings saved — monitoring: '+objs.join(', '),'ok');
+      else toast('✗ '+(d.error||'Save failed'),'danger');
+    }catch(e){toast('✗ '+e.message,'danger')}
+    finally{if(!auto&&btn){btn.textContent='◈ SAVE SETTINGS';btn.disabled=false}}
+  }
+  async function loadCurrentSettings(){
+    try{
+      const r=await fetch('/api/settings');const s=await r.json();
+      if(s.objects?.length){document.getElementById('sObjects').value=s.objects.join(', ');updateChips(s.objects.join(', '))}
+      if(s.start_time)document.getElementById('sStart').value=s.start_time;
+      if(s.end_time)document.getElementById('sEnd').value=s.end_time;
+      if(s.fire_conf){document.getElementById('sFireConf').value=s.fire_conf;document.getElementById('sFireConfVal').textContent=Math.round(s.fire_conf*100)+'%'}
+      if(s.obj_conf){document.getElementById('sObjConf').value=s.obj_conf;document.getElementById('sObjConfVal').textContent=Math.round(s.obj_conf*100)+'%'}
+      if(s.alert_cooldown)document.getElementById('sCooldown').value=s.alert_cooldown;
+    }catch(e){console.warn(e)}
+  }
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  async function loadNotifySettings(){
+    try{const r=await fetch('/api/notify/settings');const d=await r.json();
+      document.getElementById('nEmailEnabled').checked=d.email_enabled??true;
+      document.getElementById('nSenderEmail').value=d.sender_email||'';
+      document.getElementById('nRecipient').value=d.recipient_email||'';
+      document.getElementById('nCooldown').value=d.notify_cooldown||60;
+    }catch(e){}
+  }
+  async function saveNotifySettings(){
+    const pass=document.getElementById('nSenderPass').value.trim();
+    const payload={email_enabled:document.getElementById('nEmailEnabled').checked,
+      sender_email:document.getElementById('nSenderEmail').value.trim(),
+      recipient_email:document.getElementById('nRecipient').value.trim(),
+      notify_cooldown:parseInt(document.getElementById('nCooldown').value)||60};
+    if(pass)payload.sender_password=pass;
+    try{const r=await fetch('/api/notify/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const d=await r.json();
+      setNStatus(d.success?'✓ SAVED':'✗ FAILED',d.success)
+    }catch(e){setNStatus('✗ '+e.message,false)}
+  }
+  async function testNotify(){
+    const e=document.getElementById('nSenderEmail').value.trim();
+    const p=document.getElementById('nSenderPass').value.trim();
+    const r=document.getElementById('nRecipient').value.trim();
+    if(!e||!r){setNStatus('⚠ FILL SENDER & RECIPIENT',false);return}
+    if(!p){setNStatus('⚠ ENTER APP PASSWORD',false);return}
+    setNStatus('◈ SENDING TEST…',true);
+    await saveNotifySettings();
+    try{const res=await fetch('/api/notify/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:'email'})});
+      const d=await res.json();
+      setNStatus(d.success?'✓ SENT → CHECK '+r:'✗ '+(d.message||'FAILED'),d.success)
+    }catch(e){setNStatus('✗ '+e.message,false)}
+  }
+  function setNStatus(m,ok){const el=document.getElementById('notifyStatusMsg');el.textContent=m;el.style.color=ok?'var(--green)':'var(--red)'}
+
+  // ── Alert feed ─────────────────────────────────────────────────────────────
+  function addAlert(alert){
+    const list=document.getElementById('alertList');
+    const ph=list.querySelector('.no-alerts');if(ph)ph.remove();
+    const el=document.createElement('div');
+    el.className='alert-item '+(alert.severity||'MEDIUM');
+    el.innerHTML=`<span class="alert-sev">${alert.severity}</span><span class="alert-time">${alert.time||''}</span><br><span class="alert-lbl">⚡ ${(alert.label||'').toUpperCase()}</span> <span style="color:var(--muted);font-size:.55rem">${Math.round((alert.conf||0)*100)}%</span>`;
+    list.prepend(el);
+    while(list.children.length>60)list.lastChild.remove();
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function toast(msg,type=''){
+    const c=document.getElementById('toastWrap');
+    const el=document.createElement('div');
+    el.className='toast'+(type?' '+type:'');
+    el.textContent=msg;c.appendChild(el);
+    setTimeout(()=>el.remove(),3600);
+  }
+
+  // ── Beep ───────────────────────────────────────────────────────────────────
+  function playBeep(freq=1000){
+    try{const ctx=new(window.AudioContext||window.webkitAudioContext)();
+      const o=ctx.createOscillator();const g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.frequency.value=freq;o.type='square';
+      g.gain.setValueAtTime(.15,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.35);
+      o.start();o.stop(ctx.currentTime+.35);
+    }catch(_){}
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded',()=>{
+    loadCurrentSettings();
+    if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
+  });
+
+  async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/login'}
+</script>
+</body>
+</html>
