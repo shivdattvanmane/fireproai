@@ -1,0 +1,8 @@
+path: E:/firepro/Fire-Detection
+
+train: train/images
+val: valid/images
+
+names:
+  0: fire
+  1: smoke

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FirePro AI — Event Log</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#060809;--panel:#0b1217;--panel2:#0f1a22;--panel3:#111f28;
+      --border:#1a2d3a;--border2:#243d4e;
+      --amber:#f5a623;--red:#ff2d2d;--cyan:#00d4ff;--green:#39ff14;
+      --text:#b8ccd8;--text2:#7a9aaa;--muted:#2a4050;
+      --mono:'Share Tech Mono',monospace;--display:'Orbitron',sans-serif;--ui:'Rajdhani',sans-serif;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--ui);overflow:hidden}
+    body::before{content:'';position:fixed;inset:0;z-index:0;opacity:.12;pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66zm0-2l26-15V18L28 2 2 18v31L28 64z' fill='none' stroke='%23f5a623' stroke-width='.25'/%3E%3C/svg%3E")}
+
+    .shell{position:relative;z-index:1;display:grid;height:100vh;
+           grid-template-rows:48px 1fr;grid-template-columns:200px 1fr 280px;
+           grid-template-areas:"topbar topbar topbar""sidenav main rightpanel"}
+
+    /* TOPBAR */
+    .topbar{grid-area:topbar;background:linear-gradient(90deg,var(--panel),var(--panel2));
+            border-bottom:1px solid var(--border);display:flex;align-items:center;
+            padding:0 1rem;gap:1rem;position:relative;overflow:hidden}
+    .topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+      background:linear-gradient(90deg,transparent,var(--amber),transparent);animation:scan 4s linear infinite}
+    @keyframes scan{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+    .tb-logo{display:flex;align-items:center;gap:.6rem}
+    .tb-logo-icon{font-size:1.3rem;filter:drop-shadow(0 0 8px rgba(245,166,35,.7))}
+    .tb-logo-text{font-family:var(--display);font-size:.85rem;color:var(--amber);letter-spacing:.12em}
+    .tb-logo-ver{font-family:var(--mono);font-size:.48rem;color:var(--muted)}
+    .tb-div{width:1px;height:24px;background:var(--border)}
+    .tb-page{font-family:var(--display);font-size:.7rem;color:var(--text2);letter-spacing:.15em}
+    .tb-clock{margin-left:auto;font-family:var(--mono);font-size:.75rem;color:var(--amber)}
+    .tb-admin{font-family:var(--mono);font-size:.55rem;color:var(--text2);
+              background:var(--panel3);border:1px solid var(--border);padding:.2rem .6rem;
+              clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);margin-left:.5rem}
+
+    /* SIDENAV */
+    .sidenav{grid-area:sidenav;background:var(--panel);border-right:1px solid var(--border);
+             display:flex;flex-direction:column}
+    .nav-lbl{font-family:var(--mono);font-size:.5rem;color:var(--muted);letter-spacing:.2em;
+              padding:.6rem 1rem .3rem;border-top:1px solid var(--border)}
+    .nav-lbl:first-child{border-top:none;padding-top:.75rem}
+    .nav-item{display:flex;align-items:center;gap:.6rem;padding:.45rem 1rem;cursor:pointer;
+              font-size:.82rem;font-weight:500;color:var(--text2);border-left:2px solid transparent;
+              transition:all .15s;text-decoration:none}
+    .nav-item:hover{color:var(--text);background:rgba(245,166,35,.04);border-left-color:#7a5010}
+    .nav-item.active{color:var(--amber);border-left-color:var(--amber);background:rgba(245,166,35,.06)}
+    .nav-item .ni{font-size:.9rem;width:18px;text-align:center}
+    .nav-spacer{flex:1}
+    .nav-foot{padding:.75rem 1rem;border-top:1px solid var(--border);
+              font-family:var(--mono);font-size:.55rem;color:var(--muted)}
+    .nav-foot-email{color:var(--text2);font-size:.6rem;margin-bottom:.4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .btn-logout{width:100%;background:transparent;border:1px solid var(--border);color:var(--muted);
+                font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;padding:.3rem;cursor:pointer;
+                clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);transition:border-color .15s,color .15s}
+    .btn-logout:hover{border-color:var(--red);color:var(--red)}
+
+    /* MAIN */
+    .main{grid-area:main;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+
+    /* Toolbar */
+    .toolbar{
+      padding:.6rem .9rem;border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex-shrink:0;
+      background:var(--panel);
+    }
+    .tb-input,.tb-select{
+      background:rgba(0,0,0,.4);border:1px solid var(--border);
+      color:var(--text);font-family:var(--mono);font-size:.65rem;
+      padding:.32rem .55rem;outline:none;transition:border-color .2s;
+      clip-path:polygon(0 0,calc(100% - 5px) 0,100% 5px,100% 100%,0 100%);
+    }
+    .tb-input:focus,.tb-select:focus{border-color:var(--amber)}
+    .tb-input::placeholder{color:var(--muted)}
+    .tb-btn{
+      background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);
+      color:var(--amber);font-family:var(--mono);font-size:.62rem;
+      padding:.32rem .7rem;cursor:pointer;letter-spacing:.08em;
+      clip-path:polygon(0 0,calc(100% - 5px) 0,100% 5px,100% 100%,0 100%);
+      transition:background .15s;
+    }
+    .tb-btn:hover{background:rgba(245,166,35,.2)}
+    .tb-btn.ghost{background:transparent;border-color:var(--border);color:var(--muted)}
+    .tb-btn.ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+    .tb-count{margin-left:auto;font-family:var(--mono);font-size:.58rem;color:var(--muted)}
+
+    /* Table */
+    .table-wrap{flex:1;overflow-y:auto}
+    table{width:100%;border-collapse:collapse}
+    thead th{
+      position:sticky;top:0;background:var(--panel2);
+      padding:.45rem .75rem;text-align:left;
+      font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;
+      color:var(--amber);text-transform:uppercase;
+      border-bottom:1px solid var(--border2);cursor:pointer;white-space:nowrap;
+    }
+    thead th:hover{color:var(--text)}
+    tbody tr{border-bottom:1px solid rgba(26,45,58,.5);transition:background .1s}
+    tbody tr:hover{background:rgba(245,166,35,.03)}
+    tbody td{padding:.42rem .75rem;font-family:var(--mono);font-size:.67rem;white-space:nowrap}
+
+    .sev-badge{display:inline-block;padding:.1rem .45rem;font-size:.55rem;font-weight:700;letter-spacing:.06em;
+               clip-path:polygon(0 0,calc(100% - 4px) 0,100% 4px,100% 100%,0 100%)}
+    .sev-badge.HIGH  {background:rgba(255,45,45,.12);color:var(--red);border:1px solid rgba(255,45,45,.3)}
+    .sev-badge.MEDIUM{background:rgba(245,166,35,.1);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
+    .sev-badge.LOW   {background:rgba(57,255,20,.08);color:var(--green);border:1px solid rgba(57,255,20,.25)}
+    .lbl-chip{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);
+              padding:.1rem .38rem;font-size:.58rem;color:var(--amber);
+              clip-path:polygon(0 0,calc(100% - 4px) 0,100% 4px,100% 100%,0 100%)}
+    .conf-bar{display:inline-flex;align-items:center;gap:.35rem}
+    .conf-track{width:44px;height:3px;background:var(--border2);border-radius:999px;overflow:hidden}
+    .conf-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--amber));border-radius:999px}
+
+    /* empty / loading */
+    .empty-state,.loader-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
+                                 padding:3rem;gap:.75rem;font-family:var(--mono);font-size:.65rem;color:var(--muted)}
+    .empty-icon{font-size:2.5rem;opacity:.2}
+    .spin{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--amber);
+          border-radius:50%;animation:spin .6s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* RIGHT PANEL */
+    .rightpanel{grid-area:rightpanel;background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+    .rp-header{padding:.55rem .8rem;border-bottom:1px solid var(--border);
+               font-family:var(--mono);font-size:.58rem;color:var(--amber);
+               letter-spacing:.15em;text-transform:uppercase;flex-shrink:0}
+    .stat-box{padding:.7rem .9rem;border-bottom:1px solid var(--border);flex-shrink:0}
+    .stat-lbl{font-family:var(--mono);font-size:.5rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:.15rem}
+    .stat-num{font-family:var(--display);font-size:2.2rem;line-height:1}
+    .stat-num.amber{color:var(--amber)}.stat-num.red{color:var(--red)}.stat-num.cyan{color:var(--cyan)}
+    .chart-box{padding:.6rem .7rem;border-bottom:1px solid var(--border);flex-shrink:0}
+    .chart-box canvas{width:100%!important;height:130px!important}
+    .breakdown{flex:1;overflow-y:auto;padding:.6rem .9rem}
+    .lb-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.45rem}
+    .lb-name{font-family:var(--mono);font-size:.6rem;color:var(--text);width:70px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
+    .lb-track{flex:1;height:4px;background:var(--border2);border-radius:999px;overflow:hidden}
+    .lb-fill{height:100%;background:linear-gradient(90deg,var(--amber),#ff6b00);border-radius:999px;transition:width .5s}
+    .lb-cnt{font-family:var(--mono);font-size:.55rem;color:var(--muted);width:22px;text-align:right}
+
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:999px}
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <div class="tb-logo">
+      <span class="tb-logo-icon">🔥</span>
+      <div><div class="tb-logo-text">FIREPRO AI</div><div class="tb-logo-ver">TACTICAL SURVEILLANCE</div></div>
+    </div>
+    <div class="tb-div"></div>
+    <span class="tb-page">EVENT LOG / DETECTION HISTORY</span>
+    <div class="tb-clock" id="clock"></div>
+    <div class="tb-admin">◈ {{ email }}</div>
+  </header>
+
+  <nav class="sidenav">
+    <span class="nav-lbl">Navigation</span>
+    <a href="/dashboard" class="nav-item"><span class="ni">📡</span> Live Monitor</a>
+    <a href="/history"   class="nav-item active"><span class="ni">📋</span> Event Log</a>
+    <a href="/api/export/excel" class="nav-item"><span class="ni">📊</span> Export Report</a>
+    <div class="nav-spacer"></div>
+    <div class="nav-foot">
+      <div class="nav-foot-email">{{ email }}</div>
+      <button class="btn-logout" onclick="logout()">◈ TERMINATE SESSION</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="toolbar">
+      <input class="tb-input" id="filterLabel" placeholder="Filter by label…" oninput="applyFilter()" style="width:140px">
+      <select class="tb-select" id="filterSev" onchange="applyFilter()">
+        <option value="">All severities</option>
+        <option value="HIGH">HIGH</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="LOW">LOW</option>
+      </select>
+      <input class="tb-input" id="filterDate" type="date" onchange="applyFilter()">
+      <button class="tb-btn ghost" onclick="clearFilters()">✕ CLEAR</button>
+      <button class="tb-btn" onclick="loadHistory()">↺ REFRESH</button>
+      <a href="/api/export/excel" class="tb-btn" style="text-decoration:none">⬇ XLSX</a>
+      <span class="tb-count" id="rowCount">— records</span>
+    </div>
+    <div class="table-wrap">
+      <div class="loader-state" id="loader"><div class="spin"></div><span>LOADING EVENT LOG…</span></div>
+      <table id="histTable" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="sortBy('date')">Date ⇅</th>
+            <th onclick="sortBy('time')">Time ⇅</th>
+            <th onclick="sortBy('label')">Label ⇅</th>
+            <th onclick="sortBy('conf')">Confidence ⇅</th>
+            <th onclick="sortBy('severity')">Severity ⇅</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody id="histBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none">
+        <div class="empty-icon">📋</div>
+        <div>NO EVENTS FOUND</div>
+        <div style="font-size:.55rem;opacity:.5">Records appear here when detection events occur</div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="rightpanel">
+    <div class="rp-header">◈ ANALYTICS</div>
+    <div class="stat-box"><div class="stat-lbl">Total Events</div><div class="stat-num amber" id="rTotal">—</div></div>
+    <div class="stat-box"><div class="stat-lbl">High Priority</div><div class="stat-num red" id="rHigh">—</div></div>
+    <div class="stat-box"><div class="stat-lbl">Medium Alerts</div><div class="stat-num cyan" id="rMedium">—</div></div>
+    <div class="chart-box">
+      <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);letter-spacing:.12em;margin-bottom:.4rem">LAST 7 DAYS</div>
+      <canvas id="timelineChart"></canvas>
+    </div>
+    <div class="rp-header" style="border-top:1px solid var(--border)">◈ TOP LABELS</div>
+    <div class="breakdown" id="labelBreakdown"></div>
+  </aside>
+</div>
+
+<script>
+  setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false}),1000);
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false});
+
+  let allRecords=[],sortKey='timestamp',sortAsc=false,tlChart=null;
+
+  document.addEventListener('DOMContentLoaded',()=>{loadHistory();loadStats()});
+
+  async function loadHistory(){
+    document.getElementById('loader').style.display='flex';
+    document.getElementById('histTable').style.display='none';
+    document.getElementById('emptyState').style.display='none';
+    try{const r=await fetch('/api/history?limit=500');allRecords=await r.json();applyFilter()}
+    catch(e){console.error(e)}
+    finally{document.getElementById('loader').style.display='none'}
+  }
+  async function loadStats(){
+    try{
+      const r=await fetch('/api/stats');const s=await r.json();
+      document.getElementById('rTotal').textContent=s.total??0;
+      document.getElementById('rHigh').textContent=s.high_priority??0;
+      document.getElementById('rMedium').textContent=s.medium??0;
+      renderTimeline(s.timeline||[]);renderBreakdown(s.top_labels||[]);
+    }catch(e){console.error(e)}
+  }
+
+  function applyFilter(){
+    const lbl=document.getElementById('filterLabel').value.toLowerCase().trim();
+    const sev=document.getElementById('filterSev').value;
+    const dt=document.getElementById('filterDate').value;
+    let f=allRecords.filter(r=>{
+      if(lbl&&!r.label?.toLowerCase().includes(lbl))return false;
+      if(sev&&r.severity!==sev)return false;
+      if(dt&&r.date!==dt)return false;
+      return true;
+    });
+    f.sort((a,b)=>{let va=a[sortKey]??'',vb=b[sortKey]??'';
+      if(typeof va==='number')return sortAsc?va-vb:vb-va;
+      return sortAsc?va.localeCompare(vb):vb.localeCompare(va)});
+    renderTable(f);
+    document.getElementById('rowCount').textContent=f.length+' RECORDS';
+  }
+  function clearFilters(){['filterLabel','filterDate'].forEach(id=>document.getElementById(id).value='');document.getElementById('filterSev').value='';applyFilter()}
+  function sortBy(k){if(sortKey===k)sortAsc=!sortAsc;else{sortKey=k;sortAsc=true}applyFilter()}
+
+  function renderTable(records){
+    const tbody=document.getElementById('histBody');tbody.innerHTML='';
+    if(!records.length){document.getElementById('histTable').style.display='none';document.getElementById('emptyState').style.display='flex';return}
+    document.getElementById('histTable').style.display='table';document.getElementById('emptyState').style.display='none';
+    const frag=document.createDocumentFragment();
+    for(const r of records){
+      const tr=document.createElement('tr');
+      const conf=Math.round((parseFloat(r.conf||0))*100);
+      tr.innerHTML=`
+        <td style="color:var(--text2)">${r.date||'—'}</td>
+        <td style="color:var(--cyan)">${r.time||'—'}</td>
+        <td><span class="lbl-chip">${r.label||'—'}</span></td>
+        <td><div class="conf-bar"><div class="conf-track"><div class="conf-fill" style="width:${conf}%"></div></div><span style="color:var(--muted);font-size:.58rem">${conf}%</span></div></td>
+        <td><span class="sev-badge ${r.severity||'MEDIUM'}">${r.severity||'—'}</span></td>
+        <td style="color:var(--muted);font-size:.6rem">${r.source||'—'}</td>`;
+      frag.appendChild(tr);
+    }
+    tbody.appendChild(frag);
+  }
+
+  function renderTimeline(data){
+    const ctx=document.getElementById('timelineChart').getContext('2d');
+    if(tlChart)tlChart.destroy();
+    tlChart=new Chart(ctx,{type:'bar',data:{labels:data.map(d=>d.date),datasets:[{label:'Alerts',data:data.map(d=>d.count),backgroundColor:'rgba(245,166,35,.5)',borderColor:'#f5a623',borderWidth:1,borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#2a4050',font:{family:'Share Tech Mono',size:8}},grid:{color:'rgba(26,45,58,.8)'}},y:{ticks:{color:'#2a4050',font:{family:'Share Tech Mono',size:8}},grid:{color:'rgba(26,45,58,.8)'},beginAtZero:true}}}});
+  }
+  function renderBreakdown(data){
+    const el=document.getElementById('labelBreakdown');
+    const max=data[0]?.count||1;
+    el.innerHTML=data.map(({label,count})=>`<div class="lb-row"><span class="lb-name">${label}</span><div class="lb-track"><div class="lb-fill" style="width:${(count/max*100).toFixed(0)}%"></div></div><span class="lb-cnt">${count}</span></div>`).join('')||'<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">NO DATA</span>';
+  }
+
+  async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/login'}
+</script>
+</body>
+</html>
